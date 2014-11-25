@@ -632,7 +632,11 @@
       var bound = false;
 
       // Prepare the callback.
-      var cb = function() {
+      var cb = function(e) {
+        self.data('transitCallback', null);
+
+        if (e) { e.stopPropagation(); }
+
         if (bound) { self.unbind(transitionEnd, cb); }
 
         if (i > 0) {
@@ -651,7 +655,8 @@
         self.bind(transitionEnd, cb);
       } else {
         // Fallback to timers if the 'transitionend' event isn't supported.
-        window.setTimeout(cb, i);
+        var id = window.setTimeout(cb, i);
+        self.data('transitTimer', id);
       }
 
       // Apply transitions.
@@ -661,6 +666,8 @@
         }
         $(this).css(theseProperties);
       });
+
+      self.data('transitCallback', cb);
     };
 
     // Defer running. This allows the browser to paint any pending CSS it hasn't
@@ -672,6 +679,56 @@
 
     // Use jQuery's fx queue.
     callOrQueue(self, queue, deferredRun);
+
+    // Chainability.
+    return this;
+  };
+
+  // ## $.fn.transitionStop
+  // Works like $.fn.stop( [clearQueue ] [, jumpToEnd ] )
+  //     
+  $.fn.transitionStop = $.fn.transitStop = function(clearQueue, jumpToEnd){
+    this.each(function() {
+      var self = $(this);
+
+      var id = self.data('transitTimer');
+      clearTimeout(id);
+
+      self.data('transitTimer', null);
+
+      var properties = this.style[support.transitionProperty];
+
+      if(properties){
+        properties = properties.replace(/\s*/g, '').split(',');
+
+        var style = window.getComputedStyle(this),
+            css = {};
+
+        for(var i = 0; i < properties.length; i++){
+          css[properties[i]] = this.style[properties[i]];
+          this.style[properties[i]] = style[properties[i]];
+        }
+
+        this.offsetWidth; // force a repaint
+        this.style[support.transition] = 'none';
+
+        if(clearQueue){
+          self.clearQueue();
+          self.unbind(transitionEnd);
+        };
+
+        if(jumpToEnd){
+          for(var i = 0; i < properties.length; i++)
+            this.style[properties[i]] = css[properties[i]];
+
+          var cb = self.data('transitCallback');
+          if(typeof cb === 'function') cb();
+
+        }else if(!clearQueue){
+          self.dequeue();
+        };
+      };
+    });
 
     // Chainability.
     return this;
